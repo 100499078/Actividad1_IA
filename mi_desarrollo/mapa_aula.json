@@ -1,0 +1,35 @@
+{
+  "nombre": "Aula 3 - demo TP07",
+
+  "_comentario_grilla": "0 = libre, 1 = obstaculo fisico, 2 = zona prohibida. La fila 1 es el pasillo donde estan sentados los estudiantes: se puede caminar por ahi (no hay pared), pero esta PROHIBIDO. Esa distincion es el corazon del ejercicio.",
+
+  "grilla": [
+    [0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 2, 2, 2, 2, 2, 2, 2],
+    [0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 1, 1, 0, 0, 1, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 1, 0, 0, 0, 0]
+  ],
+
+  "inicio": [5, 4],
+  "destino": [0, 7],
+
+  "tamano_celda_metros": 0.5,
+  "orientacion_inicial": "ESTE",
+  "maximo_pasos": 40,
+
+  "_comentario_lugares": "Nombres que puede usar una persona al hablar. El extractor traduce estas palabras a celdas. No lo lee sim/grilla.py: es una extension propia.",
+
+  "lugares": {
+    "puerta":      [5, 7],
+    "salida":      [5, 7],
+    "ventana":     [0, 0],
+    "pizarron":    [0, 3],
+    "escritorio":  [4, 0],
+    "base":        [5, 4],
+    "origen":      [5, 4],
+    "meta":        [0, 7],
+    "destino":     [0, 7]
+  }
+}
