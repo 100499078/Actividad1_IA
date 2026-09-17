@@ -113,6 +113,17 @@ _PATRON_NEGAR_FESTEJO = (
     r"\bno\s+(?:festej\w*|celebr\w*|imit\w*|hagas?\s+(?:el\s+)?si+u+)"
 )
 
+# "no te detengas", "no pares", "segui sin detenerte": negar el freno
+# significa seguir andando, no frenar. Sin esta regla \bdeten (mas abajo,
+# en DETENERSE) los toma igual porque "detengas" y "detenerte" empiezan
+# con "deten": el robot haria justo lo contrario de lo pedido, el error
+# mas caro posible en este dominio. Encontrado probando variantes fuera
+# de los 25 casos oficiales (ninguno combina "no" con "detener").
+_PATRON_NEGAR_DETENERSE = (
+    r"\bno\s+(?:te\s+|se\s+)?(?:deten\w*|pares?)\b"
+    r"|\bsin\s+deten\w*"
+)
+
 
 def _evento_festejo(texto_normalizado):
     """'en_contra', 'gol', o None si no se menciono ningun evento."""
@@ -149,8 +160,16 @@ class ClasificadorIntencion:
     #  3. GIRAR va antes que MOVER por los comandos compuestos. En
     #     "gira 45 grados a la derecha y despues avanza" hay dos verbos;
     #     la catedra espera que valga el primero.
+    #
+    #  4. La negacion de DETENERSE (_PATRON_NEGAR_DETENERSE) va primero
+    #     que todo. Es el mismo argumento que el punto 1 pero al reves:
+    #     "no te detengas" es mas especifico que el "\bdeten" de la regla
+    #     de abajo, y lo especifico gana. Sin esto, negar el freno se
+    #     leeria como el freno mismo.
     # -----------------------------------------------------------------
     REGLAS = (
+        ("MOVER", _PATRON_NEGAR_DETENERSE),
+
         ("DETENERSE",
          r"\bdeten|\bfrena|\bquieto\b|\balto\b|\bpara\s+(todo|ya)\b"
          r"|\bno\s+(avances|sigas|te\s+muevas|camines|arranques)\b"
