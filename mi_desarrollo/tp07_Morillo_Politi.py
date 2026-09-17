@@ -641,6 +641,8 @@ def _perfil_por_defecto():
 def main():
     import sys
 
+    from voz import ErrorVoz, ReconocedorVoz
+
     # --sin-robot conserva el comportamiento historico: evalua y sale.
     # Con robot, la consola abre directo; --evaluar ejecuta antes los casos
     # originales cuando el alumno realmente quiere esa prueba.
@@ -661,15 +663,28 @@ def main():
             evaluar(AgenteRobot())
 
         if robot is not None:
+            reconocedor = ReconocedorVoz()
             print("\n  Escribi un jugador o una orden de festejo.")
             print("  Ejemplos: 'Messi', 'festeja como CR7', 'gol de Mbappe'.")
-            print("  Escribi 'jugadores' para ver el catalogo. Enter vacio para salir.")
+            print("  Tambien podes presionar Enter y hablar durante 5 segundos.")
+            print("  Escribi 'jugadores' para ver el catalogo o 'salir' para terminar.")
             while True:
                 try:
                     texto = input("\n  > ").strip()
                 except (EOFError, KeyboardInterrupt):
                     break
                 if not texto:
+                    print("    Escuchando... habla ahora.")
+                    try:
+                        voz = reconocedor.escuchar()
+                    except ErrorVoz as exc:
+                        print(f"    VOZ NO DISPONIBLE: {exc}")
+                        print("    Podes seguir escribiendo comandos.")
+                        continue
+                    texto = voz.texto
+                    detalle = f" (traducido de {voz.idioma})" if voz.traducido else ""
+                    print(f"    Entendi: {texto}{detalle}")
+                if normalizar(texto) in ("salir", "exit", "chau"):
                     break
                 if normalizar(texto) in ("jugadores", "ayuda", "help"):
                     print(f"    Disponibles: {jugadores_disponibles()}")

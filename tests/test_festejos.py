@@ -18,6 +18,14 @@ from evaluar import evaluar  # noqa: E402
 from mi_tp07 import AgenteRobot  # noqa: E402
 from sim.acciones import acciones_de  # noqa: E402
 from sim.festejos import FESTEJOS, gestos_publicos  # noqa: E402
+from sim.mundo import Mundo  # noqa: E402
+from sim.robot import (  # noqa: E402
+    ANGULO_GIRO_SIU,
+    DISTANCIA_PASO_SIU,
+    VELOCIDAD_GIRO_SIU,
+    VELOCIDAD_PASO_SIU,
+    Robot as RobotPublico,
+)
 from sim.robots import G1, Gesto  # noqa: E402
 from sim.safety import perfil  # noqa: E402
 
@@ -151,6 +159,92 @@ class TestResultadoDeEjecucion(unittest.TestCase):
         respuesta = AgenteRobot(_RobotFalso(falla=True)).procesar("Messi")
         self.assertFalse(respuesta["ejecutar"])
         self.assertIn("rechazo simulado", respuesta["mensaje"])
+
+
+class _ClienteFestejoFalso:
+    def __init__(self, llamadas):
+        self.llamadas = llamadas
+
+    def Festejo(self, nombre, duracion):
+        self.llamadas.append(("festejo", nombre, duracion))
+        return 0
+
+
+class TestCoreografiaSiu(unittest.TestCase):
+    def _robot(self, cliente):
+        robot = RobotPublico.__new__(RobotPublico)
+        robot._cliente = cliente
+        robot.perfil = perfil("tp07")
+        return robot
+
+    def test_siu_da_un_paso_gira_90_grados_y_festeja(self):
+        llamadas = []
+        robot = self._robot(_ClienteFestejoFalso(llamadas))
+
+        def avanzar(*, velocidad, tiempo):
+            llamadas.append(("avanzar", velocidad, tiempo))
+
+        def girar(*, velocidad, tiempo):
+            llamadas.append(("girar", velocidad, tiempo))
+
+        with patch.object(robot, "avanzar", side_effect=avanzar), \
+             patch.object(robot, "girar", side_effect=girar), \
+             patch.object(robot, "verificar_estado", return_value=None), \
+             patch("sim.robot.time.sleep"):
+            robot.festejar("SIU", duracion=3.2)
+
+        self.assertEqual("avanzar", llamadas[0][0])
+        self.assertAlmostEqual(0.20, llamadas[0][1] * llamadas[0][2])
+        self.assertEqual("girar", llamadas[1][0])
+        self.assertAlmostEqual(math.pi / 2.0, llamadas[1][1] * llamadas[1][2])
+        self.assertEqual(("festejo", "siu", 3.2), llamadas[2])
+
+    def test_otros_festejos_no_se_desplazan(self):
+        llamadas = []
+        robot = self._robot(_ClienteFestejoFalso(llamadas))
+
+        with patch.object(robot, "avanzar") as avanzar, \
+             patch.object(robot, "girar") as girar, \
+             patch.object(robot, "verificar_estado", return_value=None), \
+             patch("sim.robot.time.sleep"):
+            robot.festejar("messi", duracion=3.0)
+
+        avanzar.assert_not_called()
+        girar.assert_not_called()
+        self.assertEqual([("festejo", "messi", 3.0)], llamadas)
+
+    def test_preludio_termina_20_cm_adelante_y_a_90_grados(self):
+        mundo = Mundo(perfil("tp07"))
+        mundo.mover(
+            VELOCIDAD_PASO_SIU,
+            0.0,
+            0.0,
+            DISTANCIA_PASO_SIU / VELOCIDAD_PASO_SIU,
+        )
+        mundo.avanzar(dt=DISTANCIA_PASO_SIU / VELOCIDAD_PASO_SIU)
+        mundo.mover(
+            0.0,
+            0.0,
+            VELOCIDAD_GIRO_SIU,
+            ANGULO_GIRO_SIU / VELOCIDAD_GIRO_SIU,
+        )
+        mundo.avanzar(dt=ANGULO_GIRO_SIU / VELOCIDAD_GIRO_SIU)
+
+        estado = mundo.leer()
+        self.assertAlmostEqual(DISTANCIA_PASO_SIU, estado["x"], places=4)
+        self.assertAlmostEqual(0.0, estado["y"], places=4)
+        self.assertAlmostEqual(ANGULO_GIRO_SIU, estado["yaw"], places=4)
+
+    def test_sin_soporte_falla_antes_de_moverse(self):
+        robot = self._robot(object())
+
+        with patch.object(robot, "avanzar") as avanzar, \
+             patch.object(robot, "girar") as girar:
+            with self.assertRaises(NotImplementedError):
+                robot.festejar("siu", duracion=3.2)
+
+        avanzar.assert_not_called()
+        girar.assert_not_called()
 
 
 class TestArranqueSimulador(unittest.TestCase):

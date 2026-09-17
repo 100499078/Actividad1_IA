@@ -49,6 +49,13 @@ ARCHIVO_ACTIVO = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 # programa muere, el robot frena solo en ~1 s. Ver frenado en el CONTRATO.
 PASO_REFRESCO = 0.1
 
+# Preludio del SIU: un paso corto y un cuarto de vuelta antes de la pose.
+# Cada tramo queda dentro de los limites de todos los perfiles pedagogicos.
+DISTANCIA_PASO_SIU = 0.20
+VELOCIDAD_PASO_SIU = 0.20
+ANGULO_GIRO_SIU = math.pi / 2.0
+VELOCIDAD_GIRO_SIU = 0.50
+
 _DDS_INICIADO = {"hecho": False}
 
 
@@ -370,6 +377,17 @@ class Robot:
     # necesitar un metodo por jugador; la lista blanca de acciones.py
     # sigue siendo la que decide cuales pasan, aca no se agrega nada
     # nuevo a lo permitido.
+    def _preludio_siu(self) -> None:
+        """Da un paso y gira 90 grados antes de ejecutar la pose SIU."""
+        self.avanzar(
+            velocidad=VELOCIDAD_PASO_SIU,
+            tiempo=DISTANCIA_PASO_SIU / VELOCIDAD_PASO_SIU,
+        )
+        self.girar(
+            velocidad=VELOCIDAD_GIRO_SIU,
+            tiempo=ANGULO_GIRO_SIU / VELOCIDAD_GIRO_SIU,
+        )
+
     def festejar(self, nombre: str = "siu", duracion: float = 3.0) -> EstadoRobot:
         """Pose de festejo (o de decepcion). Solo el G1, y solo en el simulador.
 
@@ -383,7 +401,10 @@ class Robot:
             raise NotImplementedError(
                 "Este robot no tiene poses de festejo (solo el G1 simulado).")
         duracion = validar_duracion(duracion, self.perfil)
-        codigo = metodo(str(nombre).lower().strip(), duracion)
+        nombre = str(nombre).lower().strip()
+        if nombre == "siu":
+            self._preludio_siu()
+        codigo = metodo(nombre, duracion)
         if codigo not in (None, 0):
             raise RuntimeError(f"el simulador rechazo el festejo '{nombre}'")
         time.sleep(duracion)

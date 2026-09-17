@@ -26,14 +26,14 @@ FESTEJOS: tuple[Festejo, ...] = (
         jugador="Cristiano Ronaldo",
         aliases=("cristiano ronaldo", "cristiano", "ronaldo", "cr7", "siu"),
         duracion=3.2,
-        descripcion="SIU: giro sugerido y aterrizaje con brazos abajo y abiertos",
+        descripcion="Un paso, giro de 90 grados y SIU con brazos abajo y abiertos",
     ),
     Festejo(
         gesto="messi",
         jugador="Lionel Messi",
         aliases=("lionel messi", "leo messi", "messi", "leo"),
         duracion=3.0,
-        descripcion="Brazos elevados y manos apuntando al cielo",
+        descripcion="Brazos abiertos a la altura de los hombros y manos al cielo",
     ),
     Festejo(
         gesto="mbappe",

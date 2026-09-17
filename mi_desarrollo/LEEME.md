@@ -20,6 +20,24 @@
 El programa abre directamente la consola interactiva. Si además querés correr
 los 25 casos originales, usá `python3 mi_desarrollo/mi_tp07.py --evaluar`.
 
+### Activar comandos por voz (OpenAI Whisper)
+
+La consola acepta texto y audio. Para habilitar el micrófono una sola vez:
+
+```bat
+py -3 -m pip install -r requirements-voz.txt
+copy .env.example .env
+```
+
+Abrí `.env`, reemplazá `tu_clave_aqui` por tu `OPENAI_API_KEY` y no compartas
+ese archivo. Al ejecutar el programa, escribí normalmente o presioná **Enter**
+para grabar una orden de 5 segundos. Whisper transcribe el audio; si detecta
+otro idioma, la orden se traduce al español antes de pasar por el mismo
+clasificador y validador que usa el texto.
+
+Si falta la clave, internet, el micrófono o una dependencia, sólo se desactiva
+la voz: siempre podés seguir escribiendo.
+
 **Sin robot** (para trabajar el clasificador tranquilo):
 
 ```
@@ -38,6 +56,8 @@ Con el robot conectado podés escribirle órdenes y nombres de jugadores:
   > gol de Mbappé
   > imitá a Bellingham
   > jugadores
+  > [Enter para hablar]
+  > salir
 ```
 
 Jugadores disponibles: Cristiano Ronaldo, Lionel Messi, Kylian Mbappé, Jude
