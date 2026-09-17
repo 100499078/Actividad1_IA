@@ -31,8 +31,17 @@ Abrí **`mi_desarrollo/mi_tp07.py`**. Hay cuatro bloques con `# TU CODIGO ACA`.
 
 ### 4. Ejecutarlo
 
-Doble clic en `EJECUTAR_MI_CODIGO`. Vas a ver la tabla de los 25 casos, tu
-accuracy, y después un modo interactivo para escribirle órdenes al robot.
+Doble clic en `EJECUTAR_MI_CODIGO`. Vas a entrar directamente al modo
+interactivo para escribirle órdenes al robot.
+
+Para correr también la tabla de los 25 casos, usá:
+
+```
+python3 mi_desarrollo/mi_tp07.py --evaluar
+```
+
+En el G1 simulado también podés pedir imitaciones de festejos: `CR7`,
+`festejá como Messi`, `gol de Mbappé` o `jugadores` para ver el catálogo.
 
 ---
 
@@ -52,8 +61,8 @@ Cuatro etapas, y la consigna pide que sean **independientes**:
 | 3 | `ValidadorSeguridad` | decide si **se puede** hacer |
 | 4 | `Ejecutor` | **ya está hecho**: manda al robot |
 
-Las seis intenciones: `MOVER`, `GIRAR`, `DETENERSE`, `SALUDO`,
-`CONSULTAR_ESTADO` y `DESCONOCIDO`.
+Las intenciones base son `MOVER`, `GIRAR`, `DETENERSE`, `SALUDO`,
+`CONSULTAR_ESTADO` y `DESCONOCIDO`. Esta versión agrega `IR_A` y `FESTEJO`.
 
 **Escribí una etapa por vez y probala.** Es mucho más fácil encontrar un error
 en el clasificador solo que en el pipeline entero.

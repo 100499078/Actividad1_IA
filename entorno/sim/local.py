@@ -152,14 +152,20 @@ class ServidorLocal(socketserver.ThreadingTCPServer):
     def _orden_gesto(self, pedido: dict) -> dict:
         nombre = pedido.get("nombre", "")
         from .acciones import exigir_permitida
+        from .safety import validar_duracion
 
         try:
             exigir_permitida(nombre, self.robot.clave)
+            if nombre not in self.robot.gestos:
+                raise ValueError(
+                    f"'{nombre}' esta autorizado pero no tiene animacion para "
+                    f"el {self.robot.clave.upper()}")
+            duracion = validar_duracion(pedido.get("duracion", 2.0), self.perfil)
         except Exception as exc:                              # noqa: BLE001
             # La lista blanca vive en acciones.py y es la MISMA que usa el
             # laboratorio fisico. Nada que cambie la postura pasa por aca.
             return {"ok": False, "error": str(exc)}
-        self.mundo.gesto(nombre, float(pedido.get("duracion", 2.0)))
+        self.mundo.gesto(nombre, duracion)
         return {"ok": True}
 
     def _orden_estado(self, _pedido: dict) -> dict:
@@ -269,8 +275,12 @@ class ClienteLocal:
     # valida contra la lista blanca antes de aplicar nada.
     def Festejo(self, nombre: str = "siu", duracion: float = 3.0) -> int:
         """Pose de festejo o de decepcion. La duracion la decide quien la pide."""
-        return self._codigo(self._pedir({"orden": "gesto", "nombre": nombre,
-                                         "duracion": float(duracion)}))
+        respuesta = self._pedir({"orden": "gesto", "nombre": nombre,
+                                  "duracion": float(duracion)})
+        if not respuesta.get("ok"):
+            raise ErrorTransporte(
+                respuesta.get("error", f"el simulador rechazo el gesto '{nombre}'"))
+        return 0
 
     def Estado(self) -> dict:
         return self._pedir({"orden": "estado"}).get("estado", {})

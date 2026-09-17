@@ -9,18 +9,9 @@ mirar la ventana 3D y ajustar las poses.
 import time
 
 from robot import Robot
+from sim.festejos import FESTEJOS
 
 PAUSA = 2.0
-
-# --- AGREGADO TP07 EXTENSION -------------------------------------------
-# Por ahora solo Cristiano Ronaldo (siu) y la pose de decepcion: los
-# demas jugadores se descartaron para concentrarse en perfeccionar
-# estos dos primero (ver robots.py).
-FESTEJOS = (
-    ("SIU / Cristiano Ronaldo (piernas separadas y flexionadas, brazos abiertos)", "siu"),
-    ("DECEPCION / gol en contra (manos en la cabeza)", "decepcion"),
-)
-
 
 def mostrar(robot, titulo, accion):
     print(f"\n  >>> {titulo}")
@@ -38,8 +29,13 @@ def main():
         mostrar(robot, "SALUDO (el brazo derecho se agita)", robot.saludar)
         mostrar(robot, "DAR LA MANO (brazo al frente, quieto)", robot.dar_la_mano)
 
-        for titulo, nombre in FESTEJOS:
-            mostrar(robot, titulo, lambda nombre=nombre: robot.festejar(nombre, duracion=4.0))
+        for festejo in FESTEJOS:
+            titulo = f"{festejo.jugador.upper()} / {festejo.descripcion}"
+            mostrar(
+                robot,
+                titulo,
+                lambda f=festejo: robot.festejar(f.gesto, duracion=f.duracion),
+            )
 
         print("\n  Si el saludo NO agitaba el brazo antes de este cambio,")
         print("  ahi tenes confirmado el bug de visor.py.\n")

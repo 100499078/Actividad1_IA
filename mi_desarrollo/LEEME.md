@@ -17,6 +17,9 @@
 1. Abrí `INICIAR_SIMULADOR` y elegí el robot.
 2. Doble clic en `EJECUTAR_MI_CODIGO`, o `python3 mi_desarrollo/mi_tp07.py`.
 
+El programa abre directamente la consola interactiva. Si además querés correr
+los 25 casos originales, usá `python3 mi_desarrollo/mi_tp07.py --evaluar`.
+
 **Sin robot** (para trabajar el clasificador tranquilo):
 
 ```
@@ -27,15 +30,19 @@ Corre los 25 casos y te da la accuracy, sin abrir nada.
 
 ## Modo interactivo
 
-Con el robot conectado, después de la evaluación podés escribirle órdenes:
+Con el robot conectado podés escribirle órdenes y nombres de jugadores:
 
 ```
-  > avanzá 2 metros
-  > girá 90 grados a la derecha
-  > salta desde la mesa
+  > CR7
+  > festejá como Messi
+  > gol de Mbappé
+  > imitá a Bellingham
+  > jugadores
 ```
 
-Es la mejor forma de encontrar los casos que tu agente no cubre.
+Jugadores disponibles: Cristiano Ronaldo, Lionel Messi, Kylian Mbappé, Jude
+Bellingham, Antoine Griezmann y Juan Fernando Quintero. Los festejos solo están
+habilitados para el G1 simulado; no se envían al robot físico.
 
 ## Extensión: entrenar un modelo (nivel 2)
 

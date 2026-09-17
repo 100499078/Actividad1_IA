@@ -27,27 +27,6 @@ import sys
 import time
 import types
 
-# --- AGREGADO TP07 EXTENSION (autorizado por el docente) ---------------
-# "Resorte" de piernas para el aterrizaje de un festejo: NO es un salto
-# (los pies nunca se despegan del piso, no hay fase aerea), es un pulso
-# corto de flexion de rodilla/cadera + un descenso breve del torso, para
-# que la pose final no aparezca de golpe sino que se sienta un impacto.
-# Ver ValidadorSeguridad.PALABRAS_PELIGROSAS y acciones.PROHIBIDAS: un
-# salto de verdad esta bloqueado a proposito, en los dos lados del TP.
-DURACION_IMPULSO = 0.35  # s
-
-
-def _impulso(t: float) -> float:
-    """0..1: medio seno que arranca en 0, pica a la mitad y vuelve a 0.
-
-    `t` son los segundos transcurridos desde que arranco el gesto. Fuera
-    de la ventana de DURACION_IMPULSO devuelve 0 (no hace nada).
-    """
-    if t <= 0.0 or t >= DURACION_IMPULSO:
-        return 0.0
-    return math.sin(math.pi * t / DURACION_IMPULSO)
-
-
 def _rellenar(msg, campo: str, valor) -> None:
     """Escribe un valor en todos los slots de una secuencia del IDL.
 
@@ -317,21 +296,17 @@ class SimuladorOficial:
                 if idx < len(art):
                     art[idx] = valor
         elif gesto is not None:
-            pose, amplitud, impulso_art, impulso_altura = gesto
-            oscilacion = (amplitud * math.sin(time.time() * 7.0)) if amplitud else 0.0
+            pose, altura = gesto.estado(
+                e.get("gesto_t", 0.0), self.robot.pose_de_pie)
+            oscilacion = (
+                gesto.oscilacion * math.sin(time.time() * 7.0)
+                if gesto.oscilacion else 0.0
+            )
             for idx, valor in pose.items():
                 if idx < len(art):
-                    art[idx] = valor + oscilacion
-            # --- AGREGADO TP07 EXTENSION (autorizado por el docente) ---
-            # Empujon de entrada PROPIO de este gesto (piernas para uno,
-            # brazos para otro, ver robots.py), no uno generico del robot.
-            if impulso_art or impulso_altura:
-                golpe = _impulso(e.get("gesto_t", 999.0))
-                if golpe:
-                    for idx, delta in impulso_art.items():
-                        if idx < len(art):
-                            art[idx] += delta * golpe
-                    q[2] -= impulso_altura * golpe
+                    extra = oscilacion if idx in gesto.articulaciones_oscilacion else 0.0
+                    art[idx] = valor + extra
+            q[2] += altura
         elif e["accion"] in ("saludando", "besando"):
             # Compatibilidad con nombres viejos, por si algo todavia los manda.
             for idx, valor in self.robot.saludo.items():

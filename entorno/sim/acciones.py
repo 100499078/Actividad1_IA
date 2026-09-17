@@ -17,31 +17,23 @@ Lo permitido es lo minimo util: moverse y gestos que no cambian la postura.
 
 from __future__ import annotations
 
+from .festejos import FESTEJOS
+
 # Gestos permitidos, por robot. nombre publico -> (metodo del bridge, descripcion)
 PERMITIDAS: dict[str, dict[str, tuple[str, str]]] = {
     "g1": {
         "saludo": ("saludar", "Saluda con la mano"),
         "dar_la_mano": ("dar_la_mano", "Extiende la mano para saludar"),
-        # --- AGREGADO TP07 (autorizado por el docente) ---------------
-        # Pose estatica de festejo: brazos abajo y abiertos, piernas
-        # separadas. No cambia la altura del torso, no desenergiza y no
-        # despega los pies del piso, asi que no cae en ninguna de las
-        # familias de PROHIBIDAS de mas abajo.
-        #
-        # OJO, y esto va en el informe: esta lista la comparten el
-        # simulador y el laboratorio fisico. La entrada existe aca, pero
-        # el bridge del robot real NO tiene un metodo 'festejar', asi que
-        # en el laboratorio la orden falla en vez de ejecutarse. Es
-        # deliberado: el gesto es SOLO de simulador. Ampliar lo que el
-        # robot fisico acepta es una decision del operador, no del
-        # alumno.
-        "siu": ("festejar", "Pose de festejo (solo simulador)"),
-        # --- AGREGADO TP07 EXTENSION (autorizado por el docente) -------
-        # Mismos fundamentos que "siu" de arriba: pose de brazos/piernas
-        # sin cambiar la altura del torso ni despegar los pies. Igual
-        # que "siu", el bridge del robot real no tiene este metodo, asi
-        # que en el laboratorio fisico falla en vez de ejecutarse.
-        "decepcion": ("festejar", "Pose de decepcion: manos en la cabeza (solo simulador)"),
+        # Los festejos publicos salen del catalogo compartido. Siguen siendo
+        # SOLO de simulador: el bridge fisico no expone ``festejar``.
+        **{
+            festejo.gesto: ("festejar", f"{festejo.descripcion} (solo simulador)")
+            for festejo in FESTEJOS
+        },
+        "decepcion": (
+            "festejar",
+            "Facepalm de decepcion, con una mano sobre la cara (solo simulador)",
+        ),
     },
     "go2": {
         "saludo": ("saludar", "Saluda"),

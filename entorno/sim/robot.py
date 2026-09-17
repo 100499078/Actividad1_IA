@@ -382,7 +382,10 @@ class Robot:
         if metodo is None:
             raise NotImplementedError(
                 "Este robot no tiene poses de festejo (solo el G1 simulado).")
-        metodo(nombre, duracion)
+        duracion = validar_duracion(duracion, self.perfil)
+        codigo = metodo(str(nombre).lower().strip(), duracion)
+        if codigo not in (None, 0):
+            raise RuntimeError(f"el simulador rechazo el festejo '{nombre}'")
         time.sleep(duracion)
         return self.verificar_estado()
 

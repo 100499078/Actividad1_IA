@@ -81,6 +81,51 @@ def _generar_escena_limpia(destino: str, incluye: str) -> str:
     return destino
 
 
+@dataclass(frozen=True)
+class KeyframeGesto:
+    """Una fotografia articular dentro de una animacion."""
+
+    tiempo: float
+    pose: dict[int, float]
+    altura: float = 0.0
+
+
+@dataclass(frozen=True)
+class Gesto:
+    """Secuencia interpolada de poses, expresada en segundos."""
+
+    keyframes: tuple[KeyframeGesto, ...]
+    oscilacion: float = 0.0
+    articulaciones_oscilacion: tuple[int, ...] = ()
+
+    def estado(self, tiempo: float, base: dict[int, float]) -> tuple[dict[int, float], float]:
+        """Devuelve la pose interpolada y el desplazamiento vertical visual."""
+        if not self.keyframes:
+            return {}, 0.0
+        t = max(0.0, float(tiempo))
+        anterior = self.keyframes[0]
+        siguiente = self.keyframes[-1]
+        for candidato in self.keyframes[1:]:
+            if t <= candidato.tiempo:
+                siguiente = candidato
+                break
+            anterior = candidato
+
+        lapso = siguiente.tiempo - anterior.tiempo
+        proporcion = 1.0 if lapso <= 1e-9 else (t - anterior.tiempo) / lapso
+        proporcion = max(0.0, min(1.0, proporcion))
+        # Smoothstep: evita golpes de velocidad en cada keyframe.
+        u = proporcion * proporcion * (3.0 - 2.0 * proporcion)
+        indices = set(anterior.pose) | set(siguiente.pose)
+        pose = {}
+        for idx in indices:
+            inicio = anterior.pose.get(idx, base.get(idx, 0.0))
+            fin = siguiente.pose.get(idx, base.get(idx, 0.0))
+            pose[idx] = inicio + (fin - inicio) * u
+        altura = anterior.altura + (siguiente.altura - anterior.altura) * u
+        return pose, altura
+
+
 @dataclass
 class Robot:
     clave: str
@@ -96,25 +141,8 @@ class Robot:
     saludo: dict = field(default_factory=dict)
     pose_sentado: dict = field(default_factory=dict)
 
-    # --- AGREGADO TP07 (autorizado por el docente) -------------------
-    # Antes cada gesto animado estaba cableado en visor.py con un `if`
-    # sobre el nombre. Agregar uno obligaba a tocar el visor. Ahora los
-    # gestos son datos:
-    #
-    #  nombre -> (pose, amplitud_de_oscilacion, impulso_art, impulso_altura)
-    #
-    # `pose` son radianes por articulacion; `amplitud` en 0 deja la pose
-    # quieta, y mayor que 0 la hace oscilar (el saludo agita la mano).
-    #
-    # `impulso_art`/`impulso_altura` son el "empujon" de entrada de CADA
-    # gesto por separado -- cada festejo puede tener el suyo (piernas
-    # para uno, brazos para otro), y se van a ir afinando de a uno. Es
-    # un pulso corto (medio seno, ver _impulso() en arrancar.py) que
-    # arranca en 0, va hasta el pico y vuelve a 0: `impulso_art` suma
-    # radianes de pico a las articulaciones que indique (por indice) y
-    # `impulso_altura` baja el torso esos metros de pico. {} / 0.0 en
-    # cualquiera de los dos significa "sin empujon en ese eje". El
-    # saludo y dar_la_mano no llevan nada de esto.
+    # Gestos cinematicos por nombre. Cada uno es una secuencia de keyframes;
+    # el visor interpola entre ellos y vuelve a la postura neutral al vencer.
     gestos: dict = field(default_factory=dict)
 
     def ruta_escena(self) -> str | None:
@@ -145,29 +173,12 @@ G1_R_SHOULDER_P, G1_R_ELBOW = 22, 25
 #   brazos   15-28 (hombro P/R/Y, codo, muneca R/P/Y, por brazo)
 # Los indices de arriba encajan con ese orden; estos son los que faltaban
 # para poder abrir los brazos y las piernas.
-G1_CINTURA_Y = 12
-G1_L_SHOULDER_R, G1_R_SHOULDER_R = 16, 23
+G1_CINTURA_Y, G1_CINTURA_R, G1_CINTURA_P = 12, 13, 14
+G1_L_SHOULDER_R, G1_L_SHOULDER_Y = 16, 17
+G1_R_SHOULDER_R, G1_R_SHOULDER_Y = 23, 24
+G1_L_WRIST_R, G1_L_WRIST_P, G1_L_WRIST_Y = 19, 20, 21
+G1_R_WRIST_R, G1_R_WRIST_P, G1_R_WRIST_Y = 26, 27, 28
 G1_L_HIP_R, G1_R_HIP_R = 1, 7
-
-# --- AGREGADO TP07 EXTENSION (autorizado por el docente) ---------------
-# Empujon de entrada del festejo. Es (indice -> radianes de PICO),
-# consumido por _impulso() en arrancar.py: un pulso corto que arranca en
-# 0, sube hasta este valor y vuelve a 0. Nunca se despegan los pies ni
-# hay fase aerea.
-
-# Siu: los brazos arrancan mas arriba y mas doblados de codo (el pico
-# del pulso, como en el aterrizaje del salto real: manos cerca de la
-# cabeza) y se sueltan de golpe hacia la pose final abierta a los
-# costados. Las piernas hacen lo espejado: en el pico estan derechas y
-# juntas (el delta cancela exactamente lo que "siu" separa/flexiona en
-# la pose final) y se abren y flexionan en el mismo instante en que los
-# brazos bajan -- un solo pulso mueve las cuatro cosas sincronizadas.
-_IMPULSO_SIU = {
-    G1_L_SHOULDER_P: -1.3, G1_R_SHOULDER_P: -1.3,
-    G1_L_ELBOW: -0.5, G1_R_ELBOW: -0.5,
-    G1_L_HIP_R: -0.40, G1_R_HIP_R: 0.40,
-    G1_L_KNEE: -0.35, G1_R_KNEE: -0.35,
-}
 
 G1 = Robot(
     clave="g1",
@@ -192,50 +203,208 @@ G1 = Robot(
     pose_sentado={G1_L_HIP_P: -1.2, G1_R_HIP_P: -1.2,
                   G1_L_KNEE: 1.8, G1_R_KNEE: 1.8},
 
-    # --- AGREGADO TP07 (autorizado por el docente) -------------------
-    # Cada entrada es (pose, amplitud_de_oscilacion, impulso_art,
-    # impulso_altura). saludo/dar_la_mano no llevan empujon de entrada:
-    # {} y 0.0 en esas dos posiciones.
     gestos={
-        # El saludo de siempre, ahora con su nombre real. Amplitud 0.35:
-        # la mano se agita.
-        "saludo": ({G1_R_SHOULDER_P: -2.4, G1_R_ELBOW: -1.0}, 0.35, {}, 0.0),
+        "saludo": Gesto(
+            keyframes=(
+                KeyframeGesto(0.0, {}),
+                KeyframeGesto(0.25, {G1_R_SHOULDER_P: -2.4, G1_R_ELBOW: -1.0}),
+                KeyframeGesto(1.75, {G1_R_SHOULDER_P: -2.4, G1_R_ELBOW: -1.0}),
+                KeyframeGesto(2.0, {}),
+            ),
+            oscilacion=0.25,
+            articulaciones_oscilacion=(G1_R_ELBOW,),
+        ),
+        "dar_la_mano": Gesto(keyframes=(
+            KeyframeGesto(0.0, {}),
+            KeyframeGesto(0.35, {G1_R_SHOULDER_P: -1.1, G1_R_ELBOW: -0.7}),
+            KeyframeGesto(1.7, {G1_R_SHOULDER_P: -1.1, G1_R_ELBOW: -0.7}),
+            KeyframeGesto(2.0, {}),
+        )),
 
-        # Mano extendida al frente, quieta.
-        "dar_la_mano": ({G1_R_SHOULDER_P: -1.1, G1_R_ELBOW: -0.7}, 0.0, {}, 0.0),
+        # Cristiano: anticipacion con brazos arriba, giro sugerido desde la
+        # cintura y aterrizaje ancho. Los pies nunca dejan el piso.
+        "siu": Gesto(keyframes=(
+            KeyframeGesto(0.0, {}),
+            KeyframeGesto(0.35, {
+                G1_L_SHOULDER_P: -1.5, G1_R_SHOULDER_P: -1.5,
+                G1_L_ELBOW: -0.9, G1_R_ELBOW: -0.9,
+            }),
+            KeyframeGesto(0.65, {
+                G1_CINTURA_Y: 0.38,
+                G1_L_SHOULDER_P: -1.2, G1_R_SHOULDER_P: -1.2,
+                G1_L_ELBOW: -0.65, G1_R_ELBOW: -0.65,
+            }),
+            KeyframeGesto(0.95, {
+                G1_CINTURA_Y: 0.0, G1_CINTURA_P: -0.10,
+                G1_L_SHOULDER_P: 0.85, G1_R_SHOULDER_P: 0.85,
+                G1_L_SHOULDER_R: 0.42, G1_R_SHOULDER_R: -0.42,
+                G1_L_ELBOW: -0.10, G1_R_ELBOW: -0.10,
+                G1_L_HIP_R: 0.38, G1_R_HIP_R: -0.38,
+                G1_L_KNEE: 0.28, G1_R_KNEE: 0.28,
+            }, altura=-0.025),
+            KeyframeGesto(2.65, {
+                G1_CINTURA_P: -0.10,
+                G1_L_SHOULDER_P: 0.85, G1_R_SHOULDER_P: 0.85,
+                G1_L_SHOULDER_R: 0.42, G1_R_SHOULDER_R: -0.42,
+                G1_L_ELBOW: -0.10, G1_R_ELBOW: -0.10,
+                G1_L_HIP_R: 0.38, G1_R_HIP_R: -0.38,
+                G1_L_KNEE: 0.28, G1_R_KNEE: 0.28,
+            }, altura=-0.025),
+            KeyframeGesto(3.2, {}),
+        )),
 
-        # Cristiano / "siu". Pose final (a donde llega, y se queda),
-        # ajustada sobre el video real del aterrizaje: piernas BIEN
-        # separadas Y con la rodilla flexionada (postura atletica, no
-        # solo abiertas y derechas), brazos abiertos a los costados con
-        # el codo en flexion moderada -- ni pegados al cuerpo ni
-        # estirados del todo. El impulso de entrada (_IMPULSO_SIU)
-        # arranca con los brazos arriba y mas doblados (manos cerca de
-        # la cabeza, como en el salto real) y las piernas derechas y
-        # juntas, y se suelta de golpe hacia esta pose: los brazos bajan
-        # y las piernas se abren y flexionan en el mismo instante. Sin
-        # tocar la altura del torso: la cadera solo ROTA para separar
-        # las piernas, no se agacha.
-        "siu": ({
-            G1_L_SHOULDER_P: 0.30, G1_R_SHOULDER_P: 0.30,
-            G1_L_SHOULDER_R: 0.50, G1_R_SHOULDER_R: -0.50,
-            G1_L_ELBOW: -0.35, G1_R_ELBOW: -0.35,
-            G1_L_HIP_R: 0.40, G1_R_HIP_R: -0.40,
-            G1_L_KNEE: 0.35, G1_R_KNEE: 0.35,
-        }, 0.0, _IMPULSO_SIU, 0.0),
+        # Messi: el modelo tiene manos rigidas, por lo que los indices se
+        # representan con la direccion de ambas munecas hacia el cielo.
+        "messi": Gesto(keyframes=(
+            KeyframeGesto(0.0, {}),
+            KeyframeGesto(0.55, {
+                G1_L_SHOULDER_P: -1.20, G1_R_SHOULDER_P: -1.20,
+                G1_L_SHOULDER_R: 0.90, G1_R_SHOULDER_R: -0.90,
+                G1_L_ELBOW: -0.15, G1_R_ELBOW: -0.15,
+                G1_L_WRIST_P: -0.25, G1_R_WRIST_P: -0.25,
+            }),
+            KeyframeGesto(2.55, {
+                G1_L_SHOULDER_P: -1.20, G1_R_SHOULDER_P: -1.20,
+                G1_L_SHOULDER_R: 0.90, G1_R_SHOULDER_R: -0.90,
+                G1_L_ELBOW: -0.15, G1_R_ELBOW: -0.15,
+                G1_L_WRIST_P: -0.25, G1_R_WRIST_P: -0.25,
+            }),
+            KeyframeGesto(3.0, {}),
+        )),
 
-        # --- AGREGADO TP07 EXTENSION (autorizado por el docente) --------
-        # Decepcion ("facepalm"): UNA sola mano tapandose la cara, no
-        # las dos manos simetricas a los costados de la cabeza -- es
-        # asimetrica a proposito, igual que el gesto real. Brazo
-        # izquierdo relajado, brazo derecho sube y se dobla fuerte para
-        # llevar la mano a la cara. Es para gol en contra / penal
-        # errado -- no es un festejo de nadie, y por eso no lleva
-        # empujon de piernas: es solo el gesto de la mano en la cara.
-        "decepcion": ({
-            G1_R_SHOULDER_P: -2.0, G1_R_SHOULDER_R: -0.35, G1_R_ELBOW: -2.4,
-            G1_L_SHOULDER_P: 0.30, G1_L_SHOULDER_R: 0.15, G1_L_ELBOW: -0.20,
-        }, 0.0, {}, 0.0),
+        # Mbappe: brazos cruzados. Los hombros ruedan hacia el centro y los
+        # codos se pliegan para apoyar las manos rigidas sobre el pecho.
+        "mbappe": Gesto(keyframes=(
+            KeyframeGesto(0.0, {}),
+            KeyframeGesto(0.55, {
+                G1_L_SHOULDER_P: -0.42, G1_R_SHOULDER_P: -0.57,
+                G1_L_SHOULDER_R: -0.20, G1_R_SHOULDER_R: 0.14,
+                G1_L_SHOULDER_Y: -1.01, G1_R_SHOULDER_Y: 1.13,
+                G1_L_ELBOW: 0.45, G1_R_ELBOW: 0.46,
+                G1_L_WRIST_Y: -0.35, G1_R_WRIST_Y: 0.35,
+            }),
+            KeyframeGesto(2.55, {
+                G1_L_SHOULDER_P: -0.42, G1_R_SHOULDER_P: -0.57,
+                G1_L_SHOULDER_R: -0.20, G1_R_SHOULDER_R: 0.14,
+                G1_L_SHOULDER_Y: -1.01, G1_R_SHOULDER_Y: 1.13,
+                G1_L_ELBOW: 0.45, G1_R_ELBOW: 0.46,
+                G1_L_WRIST_Y: -0.35, G1_R_WRIST_Y: 0.35,
+            }),
+            KeyframeGesto(3.0, {}),
+        )),
+
+        "bellingham": Gesto(keyframes=(
+            KeyframeGesto(0.0, {}),
+            KeyframeGesto(0.5, {
+                G1_CINTURA_P: -0.14,
+                G1_L_SHOULDER_P: 0.0, G1_R_SHOULDER_P: 0.0,
+                G1_L_SHOULDER_R: 1.25, G1_R_SHOULDER_R: -1.25,
+                G1_L_ELBOW: -0.08, G1_R_ELBOW: -0.08,
+                G1_L_HIP_R: 0.06, G1_R_HIP_R: -0.06,
+            }),
+            KeyframeGesto(2.55, {
+                G1_CINTURA_P: -0.14,
+                G1_L_SHOULDER_P: 0.0, G1_R_SHOULDER_P: 0.0,
+                G1_L_SHOULDER_R: 1.25, G1_R_SHOULDER_R: -1.25,
+                G1_L_ELBOW: -0.08, G1_R_ELBOW: -0.08,
+                G1_L_HIP_R: 0.06, G1_R_HIP_R: -0.06,
+            }),
+            KeyframeGesto(3.0, {}),
+        )),
+
+        # Griezmann: mano izquierda en la frente y dos apoyos alternados. La
+        # mano del G1 es rigida, de modo que la letra L se sugiere con muneca.
+        "griezmann": Gesto(keyframes=(
+            KeyframeGesto(0.0, {}),
+            KeyframeGesto(0.45, {
+                G1_L_SHOULDER_P: -1.75, G1_L_SHOULDER_R: -0.15,
+                G1_L_ELBOW: -1.00, G1_L_WRIST_P: 0.55,
+                G1_R_SHOULDER_R: -0.65, G1_R_ELBOW: -0.45,
+                G1_R_HIP_P: -0.35, G1_R_KNEE: 0.65,
+            }),
+            KeyframeGesto(1.15, {
+                G1_L_SHOULDER_P: -1.75, G1_L_SHOULDER_R: -0.15,
+                G1_L_ELBOW: -1.00, G1_L_WRIST_P: 0.55,
+                G1_R_SHOULDER_R: -0.65, G1_R_ELBOW: -0.45,
+                G1_L_HIP_P: -0.35, G1_L_KNEE: 0.65,
+            }),
+            KeyframeGesto(1.85, {
+                G1_L_SHOULDER_P: -1.75, G1_L_SHOULDER_R: -0.15,
+                G1_L_ELBOW: -1.00, G1_L_WRIST_P: 0.55,
+                G1_R_SHOULDER_R: -0.65, G1_R_ELBOW: -0.45,
+                G1_R_HIP_P: -0.35, G1_R_KNEE: 0.65,
+            }),
+            KeyframeGesto(2.55, {
+                G1_L_SHOULDER_P: -1.75, G1_L_SHOULDER_R: -0.15,
+                G1_L_ELBOW: -1.00, G1_L_WRIST_P: 0.55,
+                G1_R_SHOULDER_R: -0.65, G1_R_ELBOW: -0.45,
+                G1_L_HIP_P: -0.35, G1_L_KNEE: 0.65,
+            }),
+            KeyframeGesto(3.6, {}),
+        )),
+
+        # Quintero: la mano derecha hace de lampara y la izquierda la frota.
+        "quintero": Gesto(keyframes=(
+            KeyframeGesto(0.0, {}),
+            KeyframeGesto(0.55, {
+                G1_R_SHOULDER_P: -0.49, G1_R_SHOULDER_R: 0.26,
+                G1_R_SHOULDER_Y: 0.49,
+                G1_R_ELBOW: 0.93, G1_R_WRIST_P: -0.45,
+                G1_L_SHOULDER_P: -0.51, G1_L_SHOULDER_R: -0.16,
+                G1_L_SHOULDER_Y: -0.58,
+                G1_L_ELBOW: 0.65, G1_L_WRIST_Y: -0.4,
+            }),
+            KeyframeGesto(1.15, {
+                G1_R_SHOULDER_P: -0.49, G1_R_SHOULDER_R: 0.26,
+                G1_R_SHOULDER_Y: 0.49,
+                G1_R_ELBOW: 0.93, G1_R_WRIST_P: -0.45,
+                G1_L_SHOULDER_P: -0.61, G1_L_SHOULDER_R: -0.10,
+                G1_L_SHOULDER_Y: -0.48,
+                G1_L_ELBOW: 0.70, G1_L_WRIST_Y: 0.4,
+            }),
+            KeyframeGesto(1.75, {
+                G1_R_SHOULDER_P: -0.49, G1_R_SHOULDER_R: 0.26,
+                G1_R_SHOULDER_Y: 0.49,
+                G1_R_ELBOW: 0.93, G1_R_WRIST_P: -0.45,
+                G1_L_SHOULDER_P: -0.51, G1_L_SHOULDER_R: -0.16,
+                G1_L_SHOULDER_Y: -0.58,
+                G1_L_ELBOW: 0.65, G1_L_WRIST_Y: -0.4,
+            }),
+            KeyframeGesto(2.35, {
+                G1_R_SHOULDER_P: -0.49, G1_R_SHOULDER_R: 0.26,
+                G1_R_SHOULDER_Y: 0.49,
+                G1_R_ELBOW: 0.93, G1_R_WRIST_P: -0.45,
+                G1_L_SHOULDER_P: -0.61, G1_L_SHOULDER_R: -0.10,
+                G1_L_SHOULDER_Y: -0.48,
+                G1_L_ELBOW: 0.70, G1_L_WRIST_Y: 0.4,
+            }),
+            KeyframeGesto(2.95, {
+                G1_R_SHOULDER_P: -0.49, G1_R_SHOULDER_R: 0.26,
+                G1_R_SHOULDER_Y: 0.49,
+                G1_R_ELBOW: 0.93, G1_R_WRIST_P: -0.45,
+                G1_L_SHOULDER_P: -0.51, G1_L_SHOULDER_R: -0.16,
+                G1_L_SHOULDER_Y: -0.58,
+                G1_L_ELBOW: 0.65, G1_L_WRIST_Y: -0.4,
+            }),
+            KeyframeGesto(3.4, {}),
+        )),
+
+        "decepcion": Gesto(keyframes=(
+            KeyframeGesto(0.0, {}),
+            KeyframeGesto(0.45, {
+                G1_R_SHOULDER_P: -2.0, G1_R_SHOULDER_R: -0.35,
+                G1_R_ELBOW: -1.0,
+                G1_L_SHOULDER_P: 0.30, G1_L_SHOULDER_R: 0.15,
+                G1_L_ELBOW: -0.20,
+            }),
+            KeyframeGesto(2.55, {
+                G1_R_SHOULDER_P: -2.0, G1_R_SHOULDER_R: -0.35,
+                G1_R_ELBOW: -1.0,
+                G1_L_SHOULDER_P: 0.30, G1_L_SHOULDER_R: 0.15,
+                G1_L_ELBOW: -0.20,
+            }),
+            KeyframeGesto(3.0, {}),
+        )),
     },
 )
 

@@ -78,6 +78,13 @@ class Ejecutor:
             if tipo == "CONSULTAR_ESTADO":
                 e = self.robot.verificar_estado()
                 return f"estado: {e}"
+            if tipo == "FESTEJO":
+                gesto = parametros.get("gesto")
+                if not gesto:
+                    return "sin pose asociada"
+                duracion = float(parametros.get("duracion", 3.0))
+                self.robot.festejar(gesto, duracion=duracion)
+                return f"festejo: {gesto}"
         except ErrorDeSeguridad as exc:
             # Ultima red: si algo llego hasta aca fuera de limite, el robot lo
             # rechaza igual. Que pase significa que el validador dejo pasar

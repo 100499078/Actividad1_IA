@@ -75,7 +75,10 @@ def _sena_viva():
     try:
         # Senal 0: no hace nada, solo pregunta si el proceso existe.
         os.kill(pid, 0)
-    except OSError:
+    except (OSError, SystemError):
+        # En Windows, os.kill(pid_inexistente, 0) puede envolver WinError 87
+        # en SystemError en vez de devolver OSError. Una sena vieja nunca debe
+        # impedir que el simulador vuelva a arrancar.
         return None      # murio mal y dejo la sena colgada: no bloquea
     return datos
 

@@ -1,7 +1,7 @@
 # Plan del TP07 — Inteligencia Artificial (agente de lenguaje natural)
 
 Fecha: 2026-08-24
-Estado: **analizado y organizado. Sin implementar.**
+Estado: **implementado y estabilizado en simulador; festejos solo para G1 simulado.**
 Fuentes leídas: consigna oficial (16 páginas), `labs/laboratorio_tp07/` completo,
 los 25 casos de prueba.
 
@@ -134,11 +134,10 @@ físico; sólo los casos del JSON validados previamente en simulación."**
   │ 2. escribe su pipeline en    │             │                            │
   │    mi_desarrollo/mi_tp07.py  │             │                            │
   │ 3. EJECUTAR_MI_CODIGO        │             │                            │
-  │    → corre los 25 casos      │             │                            │
-  │    → ve el robot actuar      │             │                            │
-  │    → obtiene su accuracy     │             │                            │
-  │ 4. modo interactivo: escribe │             │                            │
-  │    sus propias frases        │             │                            │
+  │    → abre modo interactivo   │             │                            │
+  │    → escribe frases/jugadores│             │                            │
+  │ 4. --evaluar corre los 25    │             │                            │
+  │    casos sin mover el robot  │             │                            │
   └───────────┬──────────────────┘             └────────────────────────────┘
               │                                              ▲
               │  entrega mi_tp07.py + reporte de accuracy    │
@@ -255,3 +254,19 @@ Vale la pena tenerlo presente al armarlo:
 4. Agente de referencia y verificación (D).
 
 Los puntos 9, 10 y 11 no dependen de nada y se pueden hacer ya.
+
+---
+
+## 9. Extensión: imitaciones de festejos
+
+La consola acepta el nombre solo (`Messi`, `CR7`) o frases como `festejá como
+Mbappé`, `imitá a Bellingham` y `gol de Juanfer`. El catálogo compartido incluye
+Cristiano Ronaldo, Lionel Messi, Kylian Mbappé, Jude Bellingham, Antoine
+Griezmann y Juan Fernando Quintero.
+
+Las animaciones se definen como keyframes interpolados, respetan los límites de
+las articulaciones del modelo oficial y vuelven a la postura neutral. Un salto
+o giro aéreo real no se simula: se representa de forma cinemática y segura.
+
+Esta extensión no se expone al robot físico. El bridge real no implementa
+`festejar`, de modo que falla cerrado aunque el agente del alumno lo pida.

@@ -17,6 +17,12 @@ import re
 import unicodedata
 
 from robot import Robot
+from sim.festejos import (
+    ALIAS_A_GESTO,
+    ALIASES_ORDENADOS,
+    duracion_de,
+    jugadores_disponibles,
+)
 
 from ejecutor import Ejecutor
 from evaluar import evaluar
@@ -63,36 +69,49 @@ def normalizar(texto):
 #  pide el gesto que ya existe.
 # =====================================================================
 
-# nombre normalizado (sin tildes) -> nombre del gesto en robot.gestos
-#
-# Por ahora solo Cristiano Ronaldo: se descartaron los demas jugadores
-# (Messi, Griezmann, Mbappe, Bellingham, Quintero) para concentrarse en
-# perfeccionar "siu" y la pose de decepcion antes de sumar mas.
-JUGADORES = {
-    "cristiano ronaldo": "siu", "cristiano": "siu", "ronaldo": "siu", "cr7": "siu",
-}
-
-# Se prueban del alias mas largo al mas corto: si el texto dice
-# "cristiano ronaldo" no queremos frenar en el alias suelto "ronaldo".
-_ALIAS_JUGADORES = sorted(JUGADORES, key=len, reverse=True)
+# Alias compartidos con el simulador. Se conserva JUGADORES como nombre
+# publico porque es util en los ejercicios y en las pruebas del alumno.
+JUGADORES = dict(ALIAS_A_GESTO)
+_ALIAS_JUGADORES = ALIASES_ORDENADOS
 
 
 def _jugador_en(texto_normalizado):
     """Devuelve el nombre del gesto del primer jugador reconocido, o None."""
+    if re.search(r"\bsi+u+\b", texto_normalizado):
+        return "siu"
     for alias in _ALIAS_JUGADORES:
-        if alias in texto_normalizado:
+        patron = rf"(?<!\w){re.escape(alias)}(?!\w)"
+        if re.search(patron, texto_normalizado):
             return JUGADORES[alias]
     return None
+
+
+def _solo_jugador(texto_normalizado):
+    """Atajo seguro para la consola: acepta un alias si es todo el texto."""
+    t = texto_normalizado.strip(" .,!¿?¡")
+    if re.fullmatch(r"si+u+", t):
+        return "siu"
+    return JUGADORES.get(t)
 
 
 # "gol", "GOOOOOL", "golazo": una g, una o repetida, una l repetida.
 # "go+l+" alcanza porque \b antes de la g evita falsos positivos como
 # "algo" (ahi la g no arranca palabra).
-_PATRON_GOL = r"\bgo+l+|anoto|convirtio"
+_PATRON_GOL = r"\b(?:go+l+(?:azo)?|anoto|convirtio|marco|metio)\b"
 
 # Eventos EN CONTRA: van en un patron aparte porque "gol en contra"
 # tambien hace match con _PATRON_GOL, y queremos distinguirlos.
 _PATRON_EN_CONTRA = r"en\s+contra|autogol|err[o0]\s+el\s+penal|fall[o0]\s+el\s+penal"
+
+# Una orden directa no necesita inventar un gol: "festeja como Messi" tiene
+# que funcionar aunque el usuario no describa un partido.
+_PATRON_ORDEN_FESTEJO = (
+    r"\b(?:festej\w*|celebr\w*|imit\w*)\b"
+    r"|\b(?:hace|haga|haz)\s+(?:el\s+)?si+u+\b"
+)
+_PATRON_NEGAR_FESTEJO = (
+    r"\bno\s+(?:festej\w*|celebr\w*|imit\w*|hagas?\s+(?:el\s+)?si+u+)"
+)
 
 
 def _evento_festejo(texto_normalizado):
@@ -134,14 +153,15 @@ class ClasificadorIntencion:
     REGLAS = (
         ("DETENERSE",
          r"\bdeten|\bfrena|\bquieto\b|\balto\b|\bpara\s+(todo|ya)\b"
-         r"|\bno\s+(avances|sigas|te\s+muevas|camines|arranques)\b"),
+         r"|\bno\s+(avances|sigas|te\s+muevas|camines|arranques)\b"
+         r"|" + _PATRON_NEGAR_FESTEJO),
 
         # FESTEJO va justo despues de DETENERSE, por la misma logica de
         # prioridad que el resto: un "pare" siempre gana. Puede ir antes
         # que todo lo demas porque su vocabulario (gol, jugadores) no se
         # cruza con verbos de movimiento, asi que el orden con las reglas
         # de abajo no importa.
-        ("FESTEJO", _PATRON_GOL + "|" + _PATRON_EN_CONTRA),
+        ("FESTEJO", _PATRON_ORDEN_FESTEJO + "|" + _PATRON_GOL + "|" + _PATRON_EN_CONTRA),
 
         ("IR_A",
          r"\bllevame\b|\bllevanos\b|\bhasta\s+(la|el)\b"
@@ -214,6 +234,11 @@ class ClasificadorIntencion:
         for intencion, patron in self.REGLAS:
             if re.search(patron, t):
                 return intencion
+
+        # En la consola un alias solo es un atajo no ambiguo: "Messi" si,
+        # pero una oracion incidental como "me gusta Messi" no ejecuta nada.
+        if _solo_jugador(t) is not None:
+            return "FESTEJO"
 
         # No reconocer es una respuesta valida. Ojo: DESCONOCIDO no
         # significa "inofensivo" -- de eso se ocupa el validador.
@@ -327,16 +352,21 @@ class ExtractorParametros:
         #   - evento en contra (con o sin jugador)-> decepcion
         #   - gol a favor pero jugador NO reconocido -> None (no hay pose)
         if tipo == "FESTEJO":
-            jugador = _jugador_en(t)
+            jugador = _jugador_en(t) or _solo_jugador(t)
             evento = _evento_festejo(t)
             p["jugador"] = jugador
             p["evento"] = evento
             if evento == "en_contra":
                 p["gesto"] = "decepcion"
-            elif evento == "gol" and jugador is not None:
+            elif jugador is not None and (
+                    evento == "gol"
+                    or re.search(_PATRON_ORDEN_FESTEJO, t)
+                    or _solo_jugador(t) is not None):
                 p["gesto"] = jugador
             else:
                 p["gesto"] = None
+            if p["gesto"] is not None:
+                p["duracion"] = duracion_de(p["gesto"])
 
         return p
 
@@ -358,7 +388,7 @@ class ValidadorSeguridad:
 
     # Palabras que describen acciones que el robot no debe intentar nunca.
     PALABRAS_PELIGROSAS = ("salta", "salto", "corre", "corré", "sprint",
-                           "empuja", "empujá", "golpea", "rompe", "tira",
+                           "empuja", "empujá", "golpe", "rompe", "tira",
                            "cae", "fuerza")
 
     # Limites que la catedra NO fija y hay que elegir y defender.
@@ -531,39 +561,33 @@ class AgenteRobot:
         # asi el comando es valido: sin esta distincion los 17 casos que
         # esperan EJECUTAR darian BLOQUEADO al evaluar sin simulador.
         #
-        # FESTEJO no pasa por el Ejecutor: ese archivo lo da la catedra
-        # hecho y solo sabe traducir MOVER/GIRAR a velocidad y tiempo. El
-        # festejo no es un movimiento de base, asi que se resuelve aca
-        # mismo, llamando directo a robot.festejar(nombre_del_gesto).
-        if tipo == "FESTEJO":
-            mensaje = self._festejar(parametros)
-        elif self.ejecutor is not None:
-            mensaje = self.ejecutor.ejecutar(tipo, parametros)
-        else:
-            mensaje = "valido (sin robot conectado)"
+        if tipo == "FESTEJO" and parametros.get("gesto") is None:
+            return self._respuesta(
+                texto, tipo, parametros,
+                ejecutar=False, bloqueado=False, confianza=0.4,
+                mensaje=("no reconoci al jugador o no tiene festejo; "
+                         f"disponibles: {jugadores_disponibles()}"))
+
+        try:
+            if self.ejecutor is not None:
+                mensaje = self.ejecutor.ejecutar(tipo, parametros)
+            elif tipo == "FESTEJO":
+                mensaje = ("valido (sin robot conectado): festejaria "
+                           f"'{parametros['gesto']}'")
+            else:
+                mensaje = "valido (sin robot conectado)"
+        except Exception as exc:                              # noqa: BLE001
+            # Un rechazo del servidor o una perdida de conexion no puede
+            # informarse como exito. Se conserva ``bloqueado=False`` porque no
+            # fue una decision del validador de seguridad.
+            return self._respuesta(
+                texto, tipo, parametros,
+                ejecutar=False, bloqueado=False, confianza=0.0,
+                mensaje=f"no se pudo ejecutar: {type(exc).__name__}: {exc}")
 
         return self._respuesta(
             texto, tipo, parametros,
             ejecutar=True, bloqueado=False, confianza=0.9, mensaje=mensaje)
-
-    def _festejar(self, parametros):
-        """Pide el gesto de festejo/decepcion ya resuelto por el extractor.
-
-        gesto is None pasa en dos casos, y en los dos el robot se queda
-        quieto: "GOOOOL" sin jugador reconocido (no sabemos que pose
-        pedir), o un jugador nombrado sin evento de gol (no hubo nada que
-        festejar).
-        """
-        gesto = parametros.get("gesto")
-        if gesto is None:
-            return "sin pose asociada: el robot se queda quieto"
-        if self.robot is None:
-            return f"valido (sin robot conectado): festejaria '{gesto}'"
-        try:
-            self.robot.festejar(gesto)
-            return f"festejo: {gesto}"
-        except NotImplementedError as exc:
-            return f"no se pudo festejar: {exc}"
 
     def _respuesta(self, texto, tipo, parametros, ejecutar, bloqueado,
                    confianza, mensaje):
@@ -598,9 +622,11 @@ def _perfil_por_defecto():
 def main():
     import sys
 
-    # Modo sin robot: solo evalua los 25 casos. Sirve para trabajar el
-    # clasificador sin tener el simulador abierto.
+    # --sin-robot conserva el comportamiento historico: evalua y sale.
+    # Con robot, la consola abre directo; --evaluar ejecuta antes los casos
+    # originales cuando el alumno realmente quiere esa prueba.
     sin_robot = "--sin-robot" in sys.argv
+    evaluar_ahora = sin_robot or "--evaluar" in sys.argv
 
     robot = None
     if not sin_robot:
@@ -609,10 +635,16 @@ def main():
 
     try:
         agente = AgenteRobot(robot)
-        evaluar(agente)
+        if evaluar_ahora:
+            # La evaluacion del lenguaje no necesita mover el robot. Incluso
+            # con el simulador abierto se usa un agente seco para que los 25
+            # casos no se ejecuten fisicamente antes de la consola.
+            evaluar(AgenteRobot())
 
         if robot is not None:
-            print("\n  Escribi ordenes para el robot. Enter vacio para salir.")
+            print("\n  Escribi un jugador o una orden de festejo.")
+            print("  Ejemplos: 'Messi', 'festeja como CR7', 'gol de Mbappe'.")
+            print("  Escribi 'jugadores' para ver el catalogo. Enter vacio para salir.")
             while True:
                 try:
                     texto = input("\n  > ").strip()
@@ -620,6 +652,9 @@ def main():
                     break
                 if not texto:
                     break
+                if normalizar(texto) in ("jugadores", "ayuda", "help"):
+                    print(f"    Disponibles: {jugadores_disponibles()}")
+                    continue
                 r = agente.procesar(texto)
                 print(f"    {r['tipo']}  {r.get('mensaje', '')}")
     finally:

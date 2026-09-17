@@ -67,11 +67,17 @@ class Visor:
         # resorte de aterrizaje (impulso_festejo) no esta replicado aca.
         gesto = self.robot.gestos.get(e["accion"])
         if gesto is not None:
-            pose, amplitud = gesto[:2]
-            oscilacion = (amplitud * math.sin(time.time() * 7.0)) if amplitud else 0.0
+            pose, altura = gesto.estado(
+                e.get("gesto_t", 0.0), self.robot.pose_de_pie)
+            oscilacion = (
+                gesto.oscilacion * math.sin(time.time() * 7.0)
+                if gesto.oscilacion else 0.0
+            )
             for idx, valor in pose.items():
                 if idx < len(art):
-                    art[idx] = valor + oscilacion
+                    extra = oscilacion if idx in gesto.articulaciones_oscilacion else 0.0
+                    art[idx] = valor + extra
+            q[2] += altura
         elif e["accion"] in ("saludando", "besando"):
             # Compatibilidad con los nombres viejos.
             for idx, valor in self.robot.saludo.items():
